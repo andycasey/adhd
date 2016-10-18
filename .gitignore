@@ -1,2 +1,6 @@
 *.pkl
 *.stan.compiled
+
+article/vc.tex
+article/*.log
+article/*.aux
