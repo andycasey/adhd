@@ -1,6 +1,7 @@
 from __future__ import division, print_function 
 
 import numpy as np 
+import emcee
 
 
 def likelihood(params, v, vmin):
@@ -31,10 +32,12 @@ def likelihood(params, v, vmin):
 
 	"""
 
-	A, k, vesc, vmin = params 
+	A, k, vesc = params
 
-	return A*(vesc - v)**k / ( (k+1.) * (vesc - vmin)**(k+1.) ) + \
-			(1. - A) / 10000.
+	powerlaw = np.zeros_like(v)
+	powerlaw[v<vesc] = (k+1.)*(1.-A)*(vesc - v[v<vesc])**k / (vesc - vmin)**(k+1.)
+
+	return powerlaw + A / (10000. - vesc)
 
 
 def likelihood_samples(params, vsamples, vmin):
@@ -66,6 +69,50 @@ def likelihood_samples(params, vsamples, vmin):
 	"""
 
 	return np.mean( likelihood(params,vsamples), axis=0 )
+
+
+def mock_data(A,k,vesc,size=2000):
+	"""
+	Draw samples from the model to fit.
+
+	Arguments
+	---------
+
+	A: float
+
+		outlier fraction
+
+	k: float
+
+		power law slope 
+
+	vesc: float
+
+		escape velocity
+
+	size: int (=2000)
+
+		number of fake observations to take
+
+	Returns
+	-------
+
+	v: array_like[size]
+
+		sample of fake observations
+
+	"""
+
+	v_model = vesc + (200-vesc)*np.random.power(k+1, size= int( (1-A)*size ) )
+	v_outlier = np.random.uniform(low=vesc, high=10000., size = int( A*size ) )
+	v = np.hstack((v_model,v_outlier))
+	np.random.shuffle(v)
+	return v
+
+
+
+
+
 
 
 
