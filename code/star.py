@@ -8,6 +8,7 @@ import numpy as np
 import os
 import pystan as stan
 from six.moves import cPickle as pickle
+from sys import version_info
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO) # TODO: Remove this when stable.
@@ -21,10 +22,14 @@ logger.addHandler(handler)
 class Model(object):
     pass
 
+_pickle_kwds = {}
+if version_info[0] > 2:
+    _pickle_kwds.update(encoding="latin1")
+
 
 class Star(Model):
 
-    _model_path = "star.stan"
+    _model_path = "code/star.stan"
 
     def __init__(self, **kwargs):
         super(Model, self).__init__(**kwargs)
@@ -44,8 +49,14 @@ class Star(Model):
 
         if os.path.exists(compiled_path):
 
-            with open(compiled_path, "rb") as fp:
-                model = pickle.load(fp)
+            try:
+                with open(compiled_path, "rb") as fp:
+                    model = pickle.load(fp, **_pickle_kwds)
+
+            except:
+                logger.exception(
+                    "Failed to load pickled model {}".format(compiled_path))
+                model = None
 
             # Check that the model code is the same as what we expected.
             with open(self._model_path, "r") as fp:
@@ -206,7 +217,8 @@ if __name__ == '__main__':
 
         op_params = model.optimize(data=data, init=init)
 
-        sampled = model.sample(data=data, init=op_params, iter=10000, chains=2)
+        sampled = model.sample(
+            data=data, init=op_params, iter=10000, chains=2, thin=10)
 
         # Save all information from the model.
         result = dict(
