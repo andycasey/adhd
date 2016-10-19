@@ -2,13 +2,12 @@
 Infer the local escape speed and dark matter density.
 """
 
-import cPickle as pickle
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pystan as stan
-
+from six.moves import cPickle as pickle
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO) # TODO: Remove this when stable.
@@ -120,7 +119,7 @@ class Star(Model):
         return self._model.optimizing(**kwds)
 
 
-    def sample(self, data, chains=4, iter=2000, warmup=None, **kwargs):
+    def sample(self, data, chains=2, iter=1024, warmup=None, **kwargs):
         """
         Draw samples from the model. Keyword arguments are passed directly to
         `StanModel.sampling`.
@@ -149,59 +148,65 @@ class Star(Model):
 
 
 
+
 if __name__ == '__main__':
 
     from astropy.table import Table
 
-    overwrite = True
+    overwrite = False
 
     model = Star()
-    tgas = Table.read("/Users/arc/research/gaia/stacked_tgas.fits")
+    raveon_tgas = Table.read("rave-on+tgas.fits")
 
-    N = len(tgas)
+    # Only consider things with sensible radial velocity errors
+    keep = (raveon_tgas["eHRV"] < 10.0) * (raveon_tgas["eHRV"] > 0)
+    raveon_tgas = raveon_tgas[keep]
+
+    N = len(raveon_tgas)
     indices = np.random.choice(range(N), N, replace=False)
 
     results = []
 
     for i, index in enumerate(indices):
 
-        row = tgas[index]
+        row = raveon_tgas[index]
 
         print("At star {}/{}: {}".format(i + 1, N, row["source_id"]))
 
-        result_file = "{source_id}.pkl".format(source_id=row["source_id"])
+        output_path = "samples/{source_id}.pkl".format(source_id=row["source_id"])
 
-        if os.path.exists(result_file) and not overwrite:
+        if os.path.exists(output_path) and not overwrite:
             print("Skipping {} because it already exists: {}".format(
-                row["source_id"], result_file))
+                row["source_id"], output_path))
             continue
 
-
-        # Build the requisite data array and covariance matrix
-        y = np.array([row["parallax"], row["pmra"], row["dec"]])
-        Sigma = np.eye(3) * np.array([
-            np.sqrt(row["parallax_error"]**2 + 0.09), # 0.09 = 0.3**2
-            row["pmra_error"],
-            row["pmdec_error"]
-        ])**2
-
-        params = ("parallax", "pmra", "pmdec")
-        for i, pi in enumerate(params):
-            for j, pj in enumerate(params):
-                if i <= j: continue
-                Sigma[i, j] = Sigma[j, i] = row["{}_{}_corr".format(pj, pi)] \
-                    * np.sqrt(Sigma[i, i] * Sigma[j, j])
-
         data = {
-            "L": 1.35, # [kpc]
-            "y": y,
-            "Sigma": Sigma,
-            "solar_motion": 0.0 # WRONG #TODO #HACK
+            "L": 1350.0, # [pc]
+            "parallax": row["parallax"]/1000.0, # [arcseconds]
+            "parallax_error": row["parallax_error"]/1000.0, # [arcseconds]
+            "pmra": row["pmra"]/1000.0, # [arcseconds/yr]
+            "pmdec": row["pmdec"]/1000.0, # [arcseconds/yr]
+            "pmra_error": row["pmra_error"]/1000.0, # [arcseconds/yr]
+            "pmdec_error": row["pmdec_error"]/1000.0, # [arcseconds/yr]
+
+            "parallax_pmra_corr": row["parallax_pmra_corr"],
+            "parallax_pmdec_corr": row["parallax_pmdec_corr"],
+            "pmra_pmdec_corr": row["pmra_pmdec_corr"],
+
+            "vrad": row["HRV"], # [km/s]
+            "vrad_error": row["eHRV"] # [km/s]
         }
 
-        op_params = model.optimize(data=data)
+        init = {
+            "d": np.clip(1.0/data["parallax"], 1e-3, np.inf),
+            "true_pmra": data["pmra"],
+            "true_pmdec": data["pmdec"],
+            "true_vrad": data["vrad"],
+        }
 
-        sampled = model.sample(data=data, init=op_params)
+        op_params = model.optimize(data=data, init=init)
+
+        sampled = model.sample(data=data, init=op_params, iter=10000, chains=2)
 
         # Save all information from the model.
         result = dict(
@@ -211,14 +216,27 @@ if __name__ == '__main__':
             summary="{}".format(sampled),
             model_code=sampled.stanmodel.model_code)
 
-        with open(result_file, "wb") as fp:
+        with open(output_path, "wb") as fp:
             pickle.dump(result, fp, -1)
 
         p = np.percentile(result["samples"]["d"], [16, 50, 84])
-        central, pos, neg = (p[1], p[2] - p[1], p[0] - p[1])
+        d, d_pos_error, d_neg_error = (p[1], p[2] - p[1], p[0] - p[1])
 
-        print(result["summary"])
-        results.append([row["source_id"], central, pos, neg])
+        p = np.percentile(result["samples"]["speed"], [16, 50, 84])
+        speed, speed_pos_error, speed_neg_error = (p[1], p[2] - p[1], p[0] - p[1])
 
+        results.append([
+            row["source_id"], 
+            d, d_pos_error, d_neg_error, 
+            speed, speed_pos_error, speed_neg_error
+        ])
+    
+    from astropy.table import Table
+    t = Table(rows=results, names=(
+        "source_id", 
+        "d", "d_pos_error", "d_neg_error",
+        "speed", "speed_pos_error", "speed_neg_error"
+        ))
 
+    raise a
 
