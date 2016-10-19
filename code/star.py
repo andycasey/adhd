@@ -176,8 +176,6 @@ if __name__ == '__main__':
     N = len(raveon_tgas)
     indices = np.random.choice(range(N), N, replace=False)
 
-    results = []
-
     for i, index in enumerate(indices):
 
         row = raveon_tgas[index]
@@ -230,25 +228,4 @@ if __name__ == '__main__':
 
         with open(output_path, "wb") as fp:
             pickle.dump(result, fp, -1)
-
-        p = np.percentile(result["samples"]["d"], [16, 50, 84])
-        d, d_pos_error, d_neg_error = (p[1], p[2] - p[1], p[0] - p[1])
-
-        p = np.percentile(result["samples"]["speed"], [16, 50, 84])
-        speed, speed_pos_error, speed_neg_error = (p[1], p[2] - p[1], p[0] - p[1])
-
-        results.append([
-            row["source_id"], 
-            d, d_pos_error, d_neg_error, 
-            speed, speed_pos_error, speed_neg_error
-        ])
     
-    from astropy.table import Table
-    t = Table(rows=results, names=(
-        "source_id", 
-        "d", "d_pos_error", "d_neg_error",
-        "speed", "speed_pos_error", "speed_neg_error"
-        ))
-
-    raise a
-
