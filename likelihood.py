@@ -71,7 +71,7 @@ def likelihood_samples(params, vsamples, vmin):
 	return np.mean( likelihood(params,vsamples), axis=0 )
 
 
-def mock_data(A,k,vesc,size=2000):
+def mock_data(A,k,vesc,size=2000,uncertainties=False):
 	"""
 	Draw samples from the model to fit.
 
@@ -104,10 +104,15 @@ def mock_data(A,k,vesc,size=2000):
 	"""
 
 	v_model = vesc + (200-vesc)*np.random.power(k+1, size= int( (1-A)*size ) )
-	v_outlier = np.random.uniform(low=vesc, high=10000., size = int( A*size ) )
+	v_outlier = np.random.uniform(low=vesc, high=800., size = int( A*size ) )
 	v = np.hstack((v_model,v_outlier))
 	np.random.shuffle(v)
-	return v
+	if not uncertainties return v
+	else:
+		v_err = np.clip( np.random.normal(loc=3.,scale=.5,size=size), 0., np.inf )
+		v_scattered = np.array([np.float(np.random.normal(loc=v[i], scale=v_err[i], size=1)) for \
+					  i in arange(v.shape[0])])
+		return v_scattered
 
 
 
