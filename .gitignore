@@ -6,5 +6,8 @@ article/*.log
 article/*.aux
 article/ms.pdf
 
+code/chains/*
+plots/*
+
 *.fits
 *.gz
